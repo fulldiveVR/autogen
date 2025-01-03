@@ -18,7 +18,32 @@ dev = [
     "cookiecutter",
     "poethepoet",
     "tomli",
-    "tomli-w"
+    "tomli-w",
+    "chromadb>=0.4.22",
+    "sentence-transformers>=2.2.2"
+
+]
+
+
+[project]
+dependencies = [
+    "numpy>=1.24.0",
+    "typing-extensions>=4.5.0",
+    "pydantic>=2.0",
+    "openai>=1.3.0",
+    "anthropic>=0.3.11",
+    "guidance>=0.0.64",
+    "transformers>=4.35.2",
+    "torch>=2.0.1",
+    "accelerate>=0.24.1",
+    "docker>=6.1.2",
+    "flaml>=1.8.0",
+    "pillow>=10.1.0",
+    "python-dotenv>=1.0.0",
+    "termcolor>=2.3.0",
+    "tiktoken>=0.5.1",
+    "websockets>=11.0.3",
+    "wolframalpha>=5.0.0"
 ]
 
 [tool.uv.workspace]

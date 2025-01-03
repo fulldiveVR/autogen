@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, AsyncGenerator, List, Mapping, Sequence
+from typing import Any, AsyncGenerator, Dict, List, Mapping, Optional, Sequence
 
 from autogen_core import CancellationToken
 
@@ -11,6 +11,7 @@ from ..messages import (
     TextMessage,
 )
 from ..state import BaseState
+from ..rag.library import Library
 
 
 class BaseChatAgent(ChatAgent, ABC):
@@ -35,11 +36,13 @@ class BaseChatAgent(ChatAgent, ABC):
         This design principle must be followed when creating a new agent.
     """
 
-    def __init__(self, name: str, description: str) -> None:
+    def __init__(self, name: str, description: str, 
+                 library: Optional[Library] = None) -> None:
         self._name = name
         if self._name.isidentifier() is False:
             raise ValueError("The agent name must be a valid Python identifier.")
         self._description = description
+        self.library = library
 
     @property
     def name(self) -> str:
@@ -190,3 +193,34 @@ class BaseChatAgent(ChatAgent, ABC):
     async def load_state(self, state: Mapping[str, Any]) -> None:
         """Restore agent from saved state. Default implementation for stateless agents."""
         BaseState.model_validate(state)
+
+    def _augment_prompt(self, prompt: str, metadata_filter: Optional[Dict[str, Any]] = None) -> str:
+        """Augment the user prompt with relevant retrieved context if a library is provided.
+        
+        Args:
+            prompt: Original user prompt.
+            metadata_filter: Optional filter criteria for document retrieval.
+            
+        Returns:
+            Augmented prompt with relevant context if library is available, otherwise original prompt.
+        """
+        if not self.library:
+            return prompt
+            
+        # Retrieve relevant documents
+        relevant_docs = self.library.retrieve(prompt, where=metadata_filter)
+        
+        if not relevant_docs:
+            return prompt
+            
+        # Format retrieved context
+        context = "\n\n".join(f"Context {i+1}:\n{doc.content}" for i, doc in enumerate(relevant_docs))
+        
+        # Combine context with original prompt
+        return f"Here is some relevant context:\n\n{context}\n\nBased on this context, please respond to: {prompt}"
+        
+    def _process_received_message(self, message: Any, sender: Any, silent: bool = False) -> None:
+        """Process received message by augmenting it with retrieved context if library is available."""
+        if self.library is not None and isinstance(message, str):
+            message = self._augment_prompt(message)
+        super()._process_received_message(message, sender, silent)

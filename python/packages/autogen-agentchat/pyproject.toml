@@ -16,6 +16,17 @@ classifiers = [
 ]
 dependencies = [
     "autogen-core==0.4.0.dev13",
+    "chromadb>=0.4.22",
+    "sentence-transformers>=2.2.2"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=6.0",
+    "pytest-cov",
+    "pytest-xdist",
+    "ruff",
+    "pyright",
 ]
 
 [tool.ruff]
