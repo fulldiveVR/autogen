@@ -1,12 +1,23 @@
-FROM mcr.microsoft.com/devcontainers/python:3.10
+FROM python:3.10-slim
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    curl \
+    gcc \
+    g++ \
+    make \
+    python3-dev \
+    rsync \
+    git \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
 
 # Install Node.js and yarn
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
-    curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - && \
-    echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list && \
     apt-get update && \
-    apt-get install -y nodejs yarn && \
-    npm install -g gatsby-cli
+    apt-get install -y nodejs && \
+    npm install -g yarn gatsby-cli && \
+    rm -rf /var/lib/apt/lists/*
 
 WORKDIR /code
 
