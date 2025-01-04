@@ -1,10 +1,17 @@
 FROM mcr.microsoft.com/devcontainers/python:3.10
 
+# Install Node.js and yarn
+RUN curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    curl -sS https://dl.yarnpkg.com/debian/pubkey.gpg | apt-key add - && \
+    echo "deb https://dl.yarnpkg.com/debian/ stable main" | tee /etc/apt/sources.list.d/yarn.list && \
+    apt-get update && \
+    apt-get install -y nodejs yarn && \
+    npm install -g gatsby-cli
+
 WORKDIR /code
 
-RUN pip install -U gunicorn autogenstudio
-
-RUN useradd -m -u 1000 user
+# Create user
+RUN useradd -m -u 1001 user
 USER user
 ENV HOME=/home/user \
     PATH=/home/user/.local/bin:$PATH \
@@ -12,6 +19,19 @@ ENV HOME=/home/user \
 
 WORKDIR $HOME/app
 
+# Copy source code
 COPY --chown=user . $HOME/app
 
-CMD gunicorn -w $((2 * $(getconf _NPROCESSORS_ONLN) + 1)) --timeout 12600 -k uvicorn.workers.UvicornWorker autogenstudio.web.app:app --bind "0.0.0.0:8081"
+# Install Python dependencies from source
+RUN pip install -e .
+RUN pip install gunicorn uvicorn
+
+# Build frontend
+RUN cd frontend && \
+    yarn install && \
+    yarn build
+
+# Expose the port
+EXPOSE 8081
+
+CMD ["autogenstudio", "ui", "--host", "0.0.0.0", "--port", "8081"]
