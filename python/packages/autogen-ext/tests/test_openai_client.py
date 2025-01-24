@@ -1,7 +1,9 @@
 import logging
 import os
-from unittest.mock import MagicMock, patch
+from unittest.mock import MagicMock, patch, AsyncMock
 from openai import AsyncOpenAI
+import pytest
+import asyncio
 
 from autogen_ext.models.openai import OpenAIChatCompletionClient
 from autogen_core.models import ModelFamily, ModelInfo, UserMessage
@@ -36,54 +38,41 @@ def test_known_model_default_configuration():
         assert client._model_info['json_output'] == True
         assert client._model_info['family'] == ModelFamily.GPT_4
 
-def test_openrouter_model():
-    """Test configuration for an OpenRouterAI model."""
-    # OpenRouter configuration example
-    client_config = {
-        "model": "anthropic/claude-2.1",  # Example OpenRouter model
-        "base_url": "https://openrouter.ai/api/v1",
-        "api_key": os.getenv("OPENROUTER_API_KEY", "test-openrouter-key"),
-        # Explicitly set capabilities for the model
-        "vision_support": False,
-        "function_calling_support": True,
-        "json_output_support": True,
-        "model_family": "anthropic"
-    }
-    
-    logger.info(f"Testing OpenRouter model configuration: {client_config}")
-    
-    # Detailed mocking of AsyncOpenAI client
+@pytest.mark.asyncio
+async def test_openrouter_model(monkeypatch: pytest.MonkeyPatch):
+    """Test configuration for an OpenRouterAI model with mocking."""
+    # Mock AsyncOpenAI client creation
     mock_client = MagicMock()
     mock_chat = MagicMock()
     mock_completions = MagicMock()
     
-    # Create a nested mock structure that mimics AsyncOpenAI's structure
     mock_client.chat = mock_chat
     mock_client.chat.completions = mock_completions
     
     # Simulate a create method response
-    mock_completions.create.return_value = MagicMock(
-        choices=[MagicMock(message=MagicMock(content="Test response"))]
-    )
+    mock_response = MagicMock()
+    mock_response.choices = [MagicMock(message=MagicMock(content="Test response"))]
+    mock_completions.create = AsyncMock(return_value=mock_response)
     
     # Patch AsyncOpenAI to return our mock client
     with patch('openai.AsyncOpenAI', return_value=mock_client):
+        client_config = {
+            "model": "anthropic/claude-2.1",
+            "base_url": "https://openrouter.ai/api/v1",
+            "api_key": "test-openrouter-key",
+            "vision_support": False,
+            "function_calling_support": True,
+            "json_output_support": True,
+            "model_family": "anthropic"
+        }
+        
         client = OpenAIChatCompletionClient(**client_config)
         
-        # Verify model info reflects OpenRouter model capabilities
-        logger.info(f"OpenRouter Model Info: {client._model_info}")
+        # Verify model info
         assert client._model_info['vision'] == False
         assert client._model_info['function_calling'] == True
         assert client._model_info['json_output'] == True
         assert client._model_info['family'] == "anthropic"
-        
-        # Optional: Test actual message creation (mocked)
-        try:
-            result = client.create([UserMessage(content="Test message", source="user")])
-            logger.info(f"Mocked create result: {result}")
-        except Exception as e:
-            logger.error(f"Error in create method: {e}")
-            raise
 
 def test_custom_model_with_explicit_capabilities():
     """Test configuration for a custom model with explicit capabilities."""
