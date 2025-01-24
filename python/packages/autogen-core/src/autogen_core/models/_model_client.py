@@ -22,8 +22,11 @@ class ModelFamily:
     GPT_4 = "gpt-4"
     GPT_35 = "gpt-35"
     UNKNOWN = "unknown"
+    CLAUDE = "claude"
+    ANTHROPIC = "anthropic"
+    OPENROUTER = "openrouter"
 
-    ANY: TypeAlias = Literal["gpt-4o", "o1", "gpt-4", "gpt-35", "unknown"]
+    ANY: TypeAlias = Literal["gpt-4o", "o1", "gpt-4", "gpt-35", "unknown", "claude", "anthropic", "openrouter"]
 
     def __new__(cls, *args: Any, **kwargs: Any) -> ModelFamily:
         raise TypeError(f"{cls.__name__} is a namespace class and cannot be instantiated.")
