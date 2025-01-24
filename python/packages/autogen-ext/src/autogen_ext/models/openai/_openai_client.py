@@ -335,33 +335,74 @@ class BaseOpenAIChatCompletionClient(ChatCompletionClient):
         create_args: Dict[str, Any],
         model_capabilities: Optional[ModelCapabilities] = None,  # type: ignore
         model_info: Optional[ModelInfo] = None,
+        vision_support: Optional[bool] = None,
+        function_calling_support: Optional[bool] = None,
+        json_output_support: Optional[bool] = None,
+        model_family: Optional[ModelFamily] = None,
+        token_limit: Optional[int] = None,
     ):
         self._client = client
-        if model_capabilities is None and model_info is None:
-            try:
-                self._model_info = _model_info.get_info(create_args["model"])
-            except KeyError as err:
-                raise ValueError("model_info is required when model name is not a valid OpenAI model") from err
-        elif model_capabilities is not None and model_info is not None:
-            raise ValueError("model_capabilities and model_info are mutually exclusive")
-        elif model_capabilities is not None and model_info is None:
-            warnings.warn("model_capabilities is deprecated, use model_info instead", DeprecationWarning, stacklevel=2)
-            info = cast(ModelInfo, model_capabilities)
-            info["family"] = ModelFamily.UNKNOWN
-            self._model_info = info
-        elif model_capabilities is None and model_info is not None:
-            self._model_info = model_info
 
+        # Default model info with safe defaults
+        DEFAULT_MODEL_INFO = ModelInfo(
+            vision=False,
+            function_calling=True,
+            json_output=True,
+            family=ModelFamily.UNKNOWN,
+            token_limit=4096,  # Safe default token limit
+        )
+
+        # 1. Build model info from individual parameters if provided
+        explicit_info = {}
+        if vision_support is not None:
+            explicit_info['vision'] = vision_support
+        if function_calling_support is not None:
+            explicit_info['function_calling'] = function_calling_support
+        if json_output_support is not None:
+            explicit_info['json_output'] = json_output_support
+        if model_family is not None:
+            explicit_info['family'] = model_family
+        if token_limit is not None:
+            explicit_info['token_limit'] = token_limit
+
+        # 2. Try to get predefined model info (if model is known)
+        try:
+            predefined_info = _model_info.get_info(create_args["model"]) if "model" in create_args else {}
+        except KeyError:
+            predefined_info = {}
+
+        # 3. Merge in priority order: 
+        # explicit params > model_info > predefined > defaults
+        final_info = {
+            **DEFAULT_MODEL_INFO,
+            **predefined_info,
+            **(model_info or {}),
+            **explicit_info
+        }
+
+        # Validate model capabilities for specific features
+        self._model_info = ModelInfo(**final_info)
+
+        # Resolve model name (if applicable)
         self._resolved_model: Optional[str] = None
         if "model" in create_args:
-            self._resolved_model = _model_info.resolve_model(create_args["model"])
+            try:
+                self._resolved_model = _model_info.resolve_model(create_args["model"])
+            except KeyError:
+                # If not a known model, use the original model name
+                self._resolved_model = create_args["model"]
 
+        # Validate JSON output configuration
         if (
             "response_format" in create_args
-            and create_args["response_format"]["type"] == "json_object"
+            and create_args["response_format"].get("type") == "json_object"
             and not self._model_info["json_output"]
         ):
-            raise ValueError("Model does not support JSON output")
+            warnings.warn(
+                f"Model {create_args.get('model', 'Unknown')} does not natively support JSON output. "
+                "Attempting to use JSON output may result in unexpected behavior.",
+                UserWarning
+            )
 
         self._create_args = create_args
         self._total_usage = RequestUsage(prompt_tokens=0, completion_tokens=0)
@@ -967,11 +1008,44 @@ class OpenAIChatCompletionClient(BaseOpenAIChatCompletionClient, Component[OpenA
             model_info = kwargs["model_info"]
             del copied_args["model_info"]
 
+        vision_support: Optional[bool] = None
+        if "vision_support" in kwargs:
+            vision_support = kwargs["vision_support"]
+            del copied_args["vision_support"]
+
+        function_calling_support: Optional[bool] = None
+        if "function_calling_support" in kwargs:
+            function_calling_support = kwargs["function_calling_support"]
+            del copied_args["function_calling_support"]
+
+        json_output_support: Optional[bool] = None
+        if "json_output_support" in kwargs:
+            json_output_support = kwargs["json_output_support"]
+            del copied_args["json_output_support"]
+
+        model_family: Optional[ModelFamily] = None
+        if "model_family" in kwargs:
+            model_family = kwargs["model_family"]
+            del copied_args["model_family"]
+
+        token_limit: Optional[int] = None
+        if "token_limit" in kwargs:
+            token_limit = kwargs["token_limit"]
+            del copied_args["token_limit"]
+
         client = _openai_client_from_config(copied_args)
         create_args = _create_args_from_config(copied_args)
         self._raw_config: Dict[str, Any] = copied_args
         super().__init__(
-            client=client, create_args=create_args, model_capabilities=model_capabilities, model_info=model_info
+            client=client,
+            create_args=create_args,
+            model_capabilities=model_capabilities,
+            model_info=model_info,
+            vision_support=vision_support,
+            function_calling_support=function_calling_support,
+            json_output_support=json_output_support,
+            model_family=model_family,
+            token_limit=token_limit,
         )
 
     def __getstate__(self) -> Dict[str, Any]:
@@ -1059,11 +1133,44 @@ class AzureOpenAIChatCompletionClient(
             model_info = kwargs["model_info"]
             del copied_args["model_info"]
 
+        vision_support: Optional[bool] = None
+        if "vision_support" in kwargs:
+            vision_support = kwargs["vision_support"]
+            del copied_args["vision_support"]
+
+        function_calling_support: Optional[bool] = None
+        if "function_calling_support" in kwargs:
+            function_calling_support = kwargs["function_calling_support"]
+            del copied_args["function_calling_support"]
+
+        json_output_support: Optional[bool] = None
+        if "json_output_support" in kwargs:
+            json_output_support = kwargs["json_output_support"]
+            del copied_args["json_output_support"]
+
+        model_family: Optional[ModelFamily] = None
+        if "model_family" in kwargs:
+            model_family = kwargs["model_family"]
+            del copied_args["model_family"]
+
+        token_limit: Optional[int] = None
+        if "token_limit" in kwargs:
+            token_limit = kwargs["token_limit"]
+            del copied_args["token_limit"]
+
         client = _azure_openai_client_from_config(copied_args)
         create_args = _create_args_from_config(copied_args)
         self._raw_config: Dict[str, Any] = copied_args
         super().__init__(
-            client=client, create_args=create_args, model_capabilities=model_capabilities, model_info=model_info
+            client=client,
+            create_args=create_args,
+            model_capabilities=model_capabilities,
+            model_info=model_info,
+            vision_support=vision_support,
+            function_calling_support=function_calling_support,
+            json_output_support=json_output_support,
+            model_family=model_family,
+            token_limit=token_limit,
         )
 
     def __getstate__(self) -> Dict[str, Any]:
