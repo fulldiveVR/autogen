@@ -1,11 +1,11 @@
 import asyncio
 from abc import ABC, abstractmethod
-from typing import Any, List
+from typing import Any, List, Dict
+import json
 
 from autogen_core import DefaultTopicId, MessageContext, event, rpc
-
 from ...base import TerminationCondition
-from ...messages import AgentEvent, ChatMessage, StopMessage
+from ...messages import AgentEvent, ChatMessage, StopMessage, FunctionCall, FunctionExecutionResult, ToolCallRequestEvent, ToolCallExecutionEvent
 from ._events import (
     GroupChatAgentResponse,
     GroupChatRequestPublish,
@@ -153,6 +153,33 @@ class BaseGroupChatManager(SequentialRoutedAgent, ABC):
                 self._current_turn = 0
                 return
 
+        # Check if the agent's response contains a function call
+        chat_message = message.agent_response.chat_message
+        if hasattr(chat_message, 'function_call') and chat_message.function_call is not None:
+            # Execute the function calls
+            tool_calls = [chat_message.function_call]
+            tool_call_msg = ToolCallRequestEvent(content=tool_calls, source=chat_message.source)
+            self._message_thread.append(tool_call_msg)
+            delta.append(tool_call_msg)
+            
+            # Execute the tool calls
+            results = await asyncio.gather(*[
+                self._execute_tool_call(call, message.agent_response.agent_tools, ctx.cancellation_token) 
+                for call in tool_calls
+            ])
+            
+            tool_call_result_msg = ToolCallExecutionEvent(content=results, source=chat_message.source)
+            self._message_thread.append(tool_call_result_msg)
+            delta.append(tool_call_result_msg)
+
+            # Send the results back to the agent
+            await self.publish_message(
+                GroupChatRequestPublish(function_result=results[0].content),
+                topic_id=DefaultTopicId(type=message.agent_response.agent_type),
+                cancellation_token=ctx.cancellation_token,
+            )
+            return
+
         # Select a speaker to continue the conversation.
         speaker_topic_type_future = asyncio.ensure_future(self.select_speaker(self._message_thread))
         # Link the select speaker future to the cancellation token.
@@ -163,6 +190,26 @@ class BaseGroupChatManager(SequentialRoutedAgent, ABC):
             topic_id=DefaultTopicId(type=speaker_topic_type),
             cancellation_token=ctx.cancellation_token,
         )
+
+    async def _execute_tool_call(
+        self, 
+        tool_call: FunctionCall, 
+        agent_tools: Dict[str, Tool],
+        cancellation_token: CancellationToken
+    ) -> FunctionExecutionResult:
+        """Execute a tool call and return the result."""
+        try:
+            if not agent_tools:
+                raise ValueError("No tools are available.")
+            tool = agent_tools.get(tool_call.name)
+            if tool is None:
+                raise ValueError(f"The tool '{tool_call.name}' is not available.")
+            arguments = json.loads(tool_call.arguments)
+            result = await tool.run_json(arguments, cancellation_token)
+            result_as_str = tool.return_value_as_string(result)
+            return FunctionExecutionResult(content=result_as_str, call_id=tool_call.id)
+        except Exception as e:
+            return FunctionExecutionResult(content=f"Error: {e}", call_id=tool_call.id)
 
     @rpc
     async def handle_reset(self, message: GroupChatReset, ctx: MessageContext) -> None:
