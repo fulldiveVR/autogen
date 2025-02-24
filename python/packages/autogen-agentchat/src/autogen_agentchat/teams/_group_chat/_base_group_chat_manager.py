@@ -1,11 +1,20 @@
 import asyncio
-from abc import ABC, abstractmethod
-from typing import Any, List, Dict
 import json
+from abc import ABC, abstractmethod
+from typing import Any, Dict, List
 
-from autogen_core import DefaultTopicId, MessageContext, event, rpc
+from autogen_core import CancellationToken, DefaultTopicId, FunctionCall, MessageContext, event, rpc
+from autogen_core.models import FunctionExecutionResult
+from autogen_core.tools import Tool
+
 from ...base import TerminationCondition
-from ...messages import AgentEvent, ChatMessage, StopMessage, FunctionCall, FunctionExecutionResult, ToolCallRequestEvent, ToolCallExecutionEvent
+from ...messages import (
+    AgentEvent,
+    ChatMessage,
+    StopMessage,
+    ToolCallRequestEvent,
+    ToolCallExecutionEvent,
+)
 from ._events import (
     GroupChatAgentResponse,
     GroupChatRequestPublish,
@@ -192,8 +201,8 @@ class BaseGroupChatManager(SequentialRoutedAgent, ABC):
         )
 
     async def _execute_tool_call(
-        self, 
-        tool_call: FunctionCall, 
+        self,
+        tool_call: FunctionCall,
         agent_tools: Dict[str, Tool],
         cancellation_token: CancellationToken
     ) -> FunctionExecutionResult:
