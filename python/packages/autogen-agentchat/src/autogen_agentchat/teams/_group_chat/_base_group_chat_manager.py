@@ -164,9 +164,9 @@ class BaseGroupChatManager(SequentialRoutedAgent, ABC):
 
         # Check if the agent's response contains a function call
         chat_message = message.agent_response.chat_message
-        if hasattr(chat_message, 'function_call') and chat_message.function_call is not None:
+        if isinstance(chat_message.content, list) and all(isinstance(item, FunctionCall) for item in chat_message.content):
             # Execute the function calls
-            tool_calls = [chat_message.function_call]
+            tool_calls = chat_message.content
             tool_call_msg = ToolCallRequestEvent(content=tool_calls, source=chat_message.source)
             self._message_thread.append(tool_call_msg)
             delta.append(tool_call_msg)
