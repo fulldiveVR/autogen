@@ -278,7 +278,9 @@ class AssistantAgent(BaseChatAgent):
         self._tools: List[Tool] = []
         if tools is not None:
             if model_client.model_info["function_calling"] is False:
-                raise ValueError("The model does not support function calling.")
+                warnings.warn("The model does not support function calling, but tools were provided. Tools will be ignored.")
+                # raise ValueError("The model does not support function calling.")
+
             for tool in tools:
                 if isinstance(tool, Tool):
                     self._tools.append(tool)
